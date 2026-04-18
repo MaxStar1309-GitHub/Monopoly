@@ -936,6 +936,32 @@ h1, h2, h3, h4 {
     box-shadow:
         inset 0 2px 8px rgba(0, 0, 0, 0.3),
         0 2px 6px rgba(0, 0, 0, 0.5);
+    transition: box-shadow 0.2s ease;
+}
+
+.slot.spinning {
+    animation: slotSpin 0.1s linear infinite;
+    filter: blur(0.5px);
+}
+
+@keyframes slotSpin {
+    0% { transform: translateY(-2px); }
+    50% { transform: translateY(2px); }
+    100% { transform: translateY(-2px); }
+}
+
+.slot.locked {
+    animation: slotLock 0.3s ease;
+    box-shadow:
+        inset 0 2px 8px rgba(0, 0, 0, 0.3),
+        0 2px 6px rgba(0, 0, 0, 0.5),
+        0 0 18px rgba(212, 175, 55, 0.6);
+    border-color: #d4af37;
+}
+
+@keyframes slotLock {
+    0% { transform: scale(0.9); filter: brightness(1.5); }
+    100% { transform: scale(1); filter: brightness(1); }
 }
 
 .casino-combos {
@@ -1265,6 +1291,32 @@ h1, h2, h3, h4 {
     font-weight: 600;
 }
 
+.offer-prop-btn {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: rgba(0, 0, 0, 0.05);
+    padding: 6px 10px;
+    border-radius: 2px;
+    font-size: 0.85rem;
+    margin: 3px 0;
+    color: #1a1208;
+    font-family: 'Playfair Display', serif;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all 0.15s ease;
+    box-shadow: none;
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+.offer-prop-btn:hover {
+    background: rgba(139, 69, 19, 0.1);
+    border-color: rgba(139, 69, 19, 0.4);
+    transform: translateX(2px);
+}
+
 .offer-cash {
     font-family: 'Cinzel', serif;
     font-weight: 900;
@@ -1344,6 +1396,50 @@ h1, h2, h3, h4 {
     background: linear-gradient(180deg, rgba(139, 0, 0, 0.1) 0%, rgba(0, 0, 0, 0.3) 100%);
     box-shadow: 0 0 15px rgba(139, 0, 0, 0.2);
     transform: translateX(4px);
+}
+
+.clickable-player.has-pending-offer {
+    animation: offerBlink 1.4s ease-in-out infinite;
+}
+.clickable-player.has-pending-offer::after {
+    content: "💌";
+    position: absolute;
+    right: 45px;
+    top: 8px;
+    font-size: 1rem;
+    animation: offerIconPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes offerBlink {
+    0%, 100% { box-shadow: 0 0 0 rgba(88, 160, 255, 0); border-color: rgba(212, 175, 55, 0.15); }
+    50% { box-shadow: 0 0 18px rgba(88, 160, 255, 0.5); border-color: rgba(88, 160, 255, 0.8); }
+}
+@keyframes offerIconPulse {
+    0%, 100% { transform: scale(1); opacity: 0.8; }
+    50% { transform: scale(1.2); opacity: 1; }
+}
+
+.offer-alert {
+    background: rgba(88, 120, 200, 0.1);
+    border: 1px solid rgba(88, 120, 200, 0.5);
+    border-radius: 2px;
+    padding: 10px;
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    animation: offerAlertPulse 2s ease-in-out infinite;
+}
+.offer-alert span {
+    font-family: 'Playfair Display', serif;
+    font-size: 0.9rem;
+    text-align: center;
+    color: #3a4a6a;
+    font-weight: 700;
+}
+@keyframes offerAlertPulse {
+    0%, 100% { box-shadow: 0 0 6px rgba(88, 120, 200, 0.2); }
+    50% { box-shadow: 0 0 16px rgba(88, 120, 200, 0.5); }
 }
 
 .clickable-player h3 {

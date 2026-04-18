@@ -20,6 +20,113 @@ export default class Monopoly {
         this.centerOverlay = { topText: null, bottomText: null, topOverride: null, topOverrideUntil: 0 };
 
         this.attentionCell = null;
+        this.innerInfo = { jackpot: 0, round: 1 };
+    }
+
+    setInnerInfo(info) {
+        this.innerInfo = { ...this.innerInfo, ...info };
+    }
+
+    drawInnerDecor() {
+        const ctx = this.ctx;
+        const s = this.step;
+        const W = this.width;
+        const H = this.height;
+        const { jackpot, round } = this.innerInfo;
+
+        ctx.save();
+        ctx.textAlign = "left";
+        ctx.textBaseline = "top";
+        ctx.shadowColor = "rgba(0, 0, 0, 0.5)";
+        ctx.shadowBlur = 4;
+
+        ctx.fillStyle = "#8c7548";
+        ctx.font = "700 14px 'Cinzel', serif";
+        ctx.fillText("ДЖЕКПОТ", s + 18, s + 18);
+        ctx.fillStyle = "#d4af37";
+        ctx.font = "900 26px 'Cinzel', serif";
+        ctx.fillText(`$${jackpot || 0}`, s + 18, s + 40);
+
+        ctx.textAlign = "right";
+        ctx.textBaseline = "bottom";
+        ctx.fillStyle = "#8c7548";
+        ctx.font = "700 14px 'Cinzel', serif";
+        ctx.fillText("КРУГ", W - s - 18, H - s - 44);
+        ctx.fillStyle = "#d4af37";
+        ctx.font = "900 26px 'Cinzel', serif";
+        ctx.fillText(`${round || 1}`, W - s - 18, H - s - 18);
+
+        ctx.restore();
+
+        this.drawDecorCard(s + 95, H - s - 95, "ШАНС", "?", "#d98027");
+        this.drawDecorCard(W - s - 95, s + 95, "КАЗНА", "✉", "#5fb3d1");
+    }
+
+    drawDecorCard(cx, cy, label, icon, color) {
+        const ctx = this.ctx;
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(-Math.PI / 4);
+
+        const w = 110;
+        const h = 72;
+
+        ctx.shadowColor = "rgba(0, 0, 0, 0.5)";
+        ctx.shadowBlur = 10;
+        ctx.shadowOffsetY = 3;
+
+        const g = ctx.createLinearGradient(-w / 2, -h / 2, w / 2, h / 2);
+        g.addColorStop(0, color);
+        g.addColorStop(1, this.shadeColor(color, -25));
+        ctx.fillStyle = g;
+        this.roundPath(ctx, -w / 2, -h / 2, w, h, 6);
+        ctx.fill();
+
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetY = 0;
+
+        ctx.strokeStyle = "#1a1208";
+        ctx.lineWidth = 2;
+        this.roundPath(ctx, -w / 2, -h / 2, w, h, 6);
+        ctx.stroke();
+
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.4)";
+        ctx.lineWidth = 1;
+        this.roundPath(ctx, -w / 2 + 5, -h / 2 + 5, w - 10, h - 10, 4);
+        ctx.stroke();
+
+        ctx.fillStyle = "#fff";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.shadowColor = "rgba(0, 0, 0, 0.6)";
+        ctx.shadowBlur = 4;
+        ctx.font = "900 30px 'Cinzel', serif";
+        ctx.fillText(icon, 0, -8);
+        ctx.font = "900 13px 'Cinzel', serif";
+        ctx.fillText(label, 0, 18);
+
+        ctx.restore();
+    }
+
+    roundPath(ctx, x, y, w, h, r) {
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.arcTo(x + w, y, x + w, y + h, r);
+        ctx.arcTo(x + w, y + h, x, y + h, r);
+        ctx.arcTo(x, y + h, x, y, r);
+        ctx.arcTo(x, y, x + w, y, r);
+        ctx.closePath();
+    }
+
+    shadeColor(hex, percent) {
+        const m = hex.replace("#", "");
+        let r = parseInt(m.substring(0, 2), 16);
+        let g = parseInt(m.substring(2, 4), 16);
+        let b = parseInt(m.substring(4, 6), 16);
+        r = Math.max(0, Math.min(255, r + Math.round((255 * percent) / 100)));
+        g = Math.max(0, Math.min(255, g + Math.round((255 * percent) / 100)));
+        b = Math.max(0, Math.min(255, b + Math.round((255 * percent) / 100)));
+        return `rgb(${r},${g},${b})`;
     }
 
     drawAttentionWaves(now) {

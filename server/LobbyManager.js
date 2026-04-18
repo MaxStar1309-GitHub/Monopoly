@@ -223,14 +223,21 @@ class LobbyManager {
                 }
 
                 this.broadcastLobbyUpdate(lobbyId);
-            } else if (stillThere.state === "playing" && stillThere.game) {
-                const gamePlayer = stillThere.game.players.find((pp) => pp.socketId === disconnectedSocketId);
-                if (gamePlayer && !gamePlayer.bankrupt && !gamePlayer.left) {
-                    stillThere.game.markLeft(gamePlayer);
-                    this.io.to(lobbyId).emit("game:state", stillThere.game.getPublicState());
-                }
             }
+            // В playing state НЕ помечаем как left автоматически —
+            // только по явному событию game:leave (кнопка или закрытие вкладки).
         }, CFG.game.disconnectGracePeriodMs);
+    }
+
+    handleLeave(socket) {
+        const lobbyId = this.socketToLobby.get(socket.id);
+        if (!lobbyId) return;
+        const lobby = this.lobbies.get(lobbyId);
+        if (!lobby || !lobby.game) return;
+        const player = lobby.game.players.find((p) => p.socketId === socket.id);
+        if (!player || player.bankrupt || player.left) return;
+        lobby.game.markLeft(player);
+        this.io.to(lobbyId).emit("game:state", lobby.game.getPublicState());
     }
 }
 

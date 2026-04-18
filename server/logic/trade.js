@@ -33,7 +33,12 @@ function giftMoney(game, fromPlayer, data) {
     fromPlayer.giftAmounts[toId] = alreadyToThis + amount;
 
     game.logMsg(`💝 {p:${fromPlayer.id}} подарил $${amount} игроку {p:${to.id}}. (всего: $${fromPlayer.giftAmounts[toId]}/$${GIFT_MAX_PER_RECIPIENT})`);
-    return { events: [] };
+    return {
+        events: [{
+            name: "game:gift-received",
+            data: { toId: to.id, fromId: fromPlayer.id, fromName: fromPlayer.name, amount },
+        }],
+    };
 }
 
 function sendOffer(game, fromPlayer, data) {

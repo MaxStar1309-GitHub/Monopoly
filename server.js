@@ -119,6 +119,10 @@ io.on("connection", (socket) => {
         lobbyManager.handleGameAction(socket, "casinoSkip");
     });
 
+    socket.on("casino:spin", () => {
+        lobbyManager.handleGameAction(socket, "casinoSpin");
+    });
+
     socket.on("casino:continue", () => {
         lobbyManager.handleGameAction(socket, "casinoContinue");
     });
@@ -169,6 +173,10 @@ io.on("connection", (socket) => {
 
     socket.on("game:hurry", (data) => {
         lobbyManager.handleGameAction(socket, "hurryPlayer", data);
+    });
+
+    socket.on("game:leave", () => {
+        lobbyManager.handleLeave(socket);
     });
 
     socket.on("disconnect", () => {

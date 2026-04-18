@@ -174,6 +174,14 @@ function run(game, player, data) {
             game.logMsg(`🛠 [DEBUG] ход: {p:${target.id}}`);
             return { events: [] };
         }
+        case "playerKick": {
+            const target = resolvePlayer(game, data.target);
+            if (!target) return { error: "Игрок не найден." };
+            if (target.bankrupt || target.left) return { error: "Игрок уже не в игре." };
+            game.logMsg(`🛠 [DEBUG] {p:${target.id}} кикнут`);
+            game.markLeft(target);
+            return { events: [] };
+        }
         default:
             return { error: "Неизвестная debug-команда." };
     }

@@ -54,6 +54,7 @@ class GameState {
         this.doublesCount = 0;
         this.pendingAction = null;
         this.log = [];
+        this.roundNumber = 1;
 
         this.chanceDeck = shuffle(CHANCE_CARDS);
         this.chanceIndex = 0;
@@ -95,6 +96,7 @@ class GameState {
             winnerId: this.winnerId,
             stats: this.stats,
             doublesCount: this.doublesCount,
+            roundNumber: this.roundNumber,
             currentPlayerIndex: this.currentPlayerIndex,
             currentPlayerId: this.players[this.currentPlayerIndex].id,
             currentPlayerSocketId: this.players[this.currentPlayerIndex].socketId,
@@ -152,6 +154,7 @@ class GameState {
             case "useJailCard": return this.useJailCard(player);
             case "casinoAccept": return casino.accept(this, player, data);
             case "casinoDecline": return casino.decline(this, player);
+            case "casinoSpin": return casino.spin(this, player);
             case "casinoContinue": return casino.continue(this, player);
             default: return { error: "Неизвестное действие." };
         }
@@ -329,11 +332,13 @@ class GameState {
         this.doublesCount = 0;
         this.pendingAction = null;
 
-        let next = this.currentPlayerIndex;
+        const oldIdx = this.currentPlayerIndex;
+        let next = oldIdx;
         for (let i = 0; i < this.players.length; i++) {
             next = (next + 1) % this.players.length;
             if (!this.players[next].bankrupt && !this.players[next].left) break;
         }
+        if (next <= oldIdx) this.roundNumber++;
         this.currentPlayerIndex = next;
         this.phase = "roll";
 

@@ -33,6 +33,13 @@ let previousPositions = {};
 let previousBalances = {};
 let pendingBalanceDeltas = [];
 
+let casinoAnimState = null;
+let lastCasinoPhase = null;
+
+let viewingOffer = false;
+let recentGiftNotif = null;
+let giftNotifTimer = null;
+
 socket.on("connect", () => {
     socket.emit("lobby:rejoin", { lobbyId, playerName: me.name });
 });
@@ -53,6 +60,16 @@ socket.on("game:state", (newState) => {
         }
     }
     for (const p of state.players) previousBalances[p.id] = p.balance;
+
+    const nowPhase = state.casinoGame?.phase || null;
+    if (lastCasinoPhase !== "done" && nowPhase === "done" && state.casinoGame?.slots) {
+        casinoAnimState = {
+            startTime: performance.now(),
+            finalSlots: state.casinoGame.slots.slice(),
+        };
+    }
+    lastCasinoPhase = nowPhase;
+
     render();
     flushBalanceDeltas();
 });
@@ -81,6 +98,19 @@ socket.on("game:hurry", ({ toId, fromName }) => {
     }
 });
 
+socket.on("game:gift-received", ({ toId, fromName, amount }) => {
+    const myPlayer = state?.players.find((p) => p.socketId === socket.id);
+    if (!myPlayer || toId !== myPlayer.id) return;
+    recentGiftNotif = { fromName, amount, at: performance.now() };
+    if (giftNotifTimer) clearTimeout(giftNotifTimer);
+    giftNotifTimer = setTimeout(() => {
+        recentGiftNotif = null;
+        giftNotifTimer = null;
+        if (state) render();
+    }, 4000);
+    render();
+});
+
 socket.on("game:error", ({ message }) => {
     alert(message);
 });
@@ -101,11 +131,16 @@ if (historyBtn) {
 
 $("exit-to-menu-btn").onclick = () => {
     if (!confirm("Выйти из игры? Твои данные будут потеряны.")) return;
+    socket.emit("game:leave");
     sessionStorage.removeItem("lobbyId");
     sessionStorage.removeItem("me");
     sessionStorage.removeItem("isHost");
-    window.location.href = "index.html";
+    setTimeout(() => { window.location.href = "index.html"; }, 150);
 };
+
+window.addEventListener("beforeunload", () => {
+    try { socket.emit("game:leave"); } catch (e) {}
+});
 
 canvas.addEventListener("click", (e) => {
     if (!state) return;
@@ -147,8 +182,16 @@ function render() {
         && (pa?.type === "end-turn-only" || pa?.type === "roll-again");
     $("end-turn-button").disabled = !canEndTurn;
 
-    monopoly.centerOverlay.topText = (isMyTurn && state.phase === "roll") ? "ВАШ ХОД" : null;
-    monopoly.centerOverlay.bottomText = canEndTurn ? "ЗАВЕРШИТЕ ХОД" : null;
+    let topText = null;
+    if (state.phase === "ended") topText = null;
+    else if (canEndTurn) topText = "ЗАВЕРШИТЕ ХОД";
+    else if (isMyTurn && state.phase === "roll") topText = "ВАШ ХОД";
+    monopoly.centerOverlay.topText = topText;
+
+    monopoly.centerOverlay.bottomText = computeBottomNotif(myPlayer, isMyTurn);
+
+    const myIncomingOffer = myPlayer && state.pendingOffers?.[myPlayer.id];
+    if (!myIncomingOffer) viewingOffer = false;
 
     updateAttentionCell(myPlayer, isMyTurn);
     if (pa?.type === "roll-again" && isMyTurn) {
@@ -169,11 +212,42 @@ function boardFrame() {
         return;
     }
     const now = performance.now();
+    monopoly.setInnerInfo({ jackpot: state.jackpot, round: state.roundNumber });
     monopoly.draw_map(state.board, state.groupColors, state.ownership, state.players);
+    monopoly.drawInnerDecor();
     monopoly.drawAttentionWaves(now);
     monopoly.draw_tokens(state.players, state.currentPlayerId, now);
     drawDice(now);
+    updateCasinoSlotAnim(now);
     requestAnimationFrame(boardFrame);
+}
+
+const CASINO_SLOT_STOPS = [1400, 1900, 2400];
+function updateCasinoSlotAnim(now) {
+    if (!casinoAnimState) return;
+    const symbols = state?.casinoSymbols || ["💎", "👑", "⭐", "🍒"];
+    const slotEls = document.querySelectorAll(".casino-slots .slot");
+    if (slotEls.length !== 3) return;
+    const elapsed = now - casinoAnimState.startTime;
+
+    for (let i = 0; i < 3; i++) {
+        if (elapsed >= CASINO_SLOT_STOPS[i]) {
+            slotEls[i].textContent = casinoAnimState.finalSlots[i];
+            slotEls[i].classList.remove("spinning");
+            slotEls[i].classList.add("locked");
+        } else {
+            const idx = Math.floor(elapsed / 55 + i * 2) % symbols.length;
+            slotEls[i].textContent = symbols[idx];
+            slotEls[i].classList.add("spinning");
+            slotEls[i].classList.remove("locked");
+        }
+    }
+
+    if (elapsed >= CASINO_SLOT_STOPS[2] + 200) {
+        for (const el of slotEls) el.classList.remove("spinning", "locked");
+        casinoAnimState = null;
+        render();
+    }
 }
 requestAnimationFrame(boardFrame);
 
@@ -299,6 +373,9 @@ function renderPlayerList(myPlayer) {
         if (p.id === selectedPlayerId) div.classList.add("selected-player");
         if (p.id === state.currentPlayerId && !p.bankrupt && !p.left) div.classList.add("active-player-row");
 
+        const hasOfferFromMe = myPlayer && state.pendingOffers?.[myPlayer.id]?.fromId === p.id;
+        if (hasOfferFromMe) div.classList.add("has-pending-offer");
+
         const isMe = myPlayer && p.id === myPlayer.id;
         const meBadge = isMe ? `<span class="me-badge">Я</span>` : "";
         const swatch = `<span class="color-swatch" style="background:${p.color}"></span>`;
@@ -414,6 +491,23 @@ function formatLogEntry(raw) {
             const color = cellLogColor(cell);
             return `<span class="log-card"><span class="log-dot" style="background:${color}"></span>${escapeHtml(cell.name)}</span>`;
         });
+}
+
+function computeBottomNotif(myPlayer, isMyTurn) {
+    if (!myPlayer) return null;
+    if (recentGiftNotif && (performance.now() - recentGiftNotif.at) < 4000) {
+        return `🎁 ${recentGiftNotif.fromName}: +$${recentGiftNotif.amount}`;
+    }
+    const offer = state.pendingOffers?.[myPlayer.id];
+    if (offer) {
+        const sender = state.players.find((p) => p.id === offer.fromId);
+        return `💌 Предложение от ${sender ? sender.name : "?"}`;
+    }
+    const pa = state.pendingAction;
+    if (isMyTurn && pa && ["buy-option", "pay-rent", "pay-tax", "card-draw", "casino-offer"].includes(pa.type)) {
+        return "⚠ Ожидается действие";
+    }
+    return null;
 }
 
 function updateAttentionCell(myPlayer, isMyTurn) {
@@ -532,7 +626,7 @@ function renderCardDisplay(myPlayer, isMyTurn) {
     }
 
     const incomingOffer = myPlayer && state.pendingOffers?.[myPlayer.id];
-    if (incomingOffer) {
+    if (incomingOffer && viewingOffer) {
         renderIncomingOffer(card, incomingOffer, myPlayer);
         return;
     }
@@ -834,6 +928,17 @@ function renderPlayerView(card, playerId, myPlayer) {
         propsHtml = `<div class="player-view-empty">Нет собственности</div>`;
     }
 
+    let offerBtnHtml = "";
+    const incomingOffer = myPlayer && state.pendingOffers?.[myPlayer.id];
+    if (!isMe && incomingOffer && incomingOffer.fromId === player.id) {
+        offerBtnHtml = `
+            <div class="offer-alert">
+                <span>💌 Этот игрок прислал тебе предложение</span>
+                <button class="card-action-btn primary" id="btn-view-offer">Перейти к предложению</button>
+            </div>
+        `;
+    }
+
     let tradeHtml = "";
     if (!isMe && myPlayer && !myPlayer.bankrupt && !player.bankrupt) {
         const limits = state.giftLimits || { maxPerRecipient: 500 };
@@ -869,6 +974,7 @@ function renderPlayerView(card, playerId, myPlayer) {
             <div class="player-view-status">${status.join(" ") || "&nbsp;"}</div>
             <h3 class="player-view-section-title">Собственность (${player.properties.length})</h3>
             ${propsHtml}
+            ${offerBtnHtml}
             ${tradeHtml}
             <button id="player-view-close" class="secondary" style="margin-top:15px;width:100%">Закрыть</button>
         </div>
@@ -887,6 +993,15 @@ function renderPlayerView(card, playerId, myPlayer) {
         selectedPlayerId = null;
         render();
     };
+
+    const viewOfferBtn = $("btn-view-offer");
+    if (viewOfferBtn) {
+        viewOfferBtn.onclick = () => {
+            viewingOffer = true;
+            selectedPlayerId = null;
+            render();
+        };
+    }
 
     const giftBtn = $("btn-gift-money");
     if (giftBtn) {
@@ -1029,7 +1144,7 @@ function renderIncomingOffer(card, offer, _myPlayer) {
         return cids.map((cid) => {
             const cell = state.board[cid];
             const color = cell.group ? state.groupColors[cell.group] : "#888";
-            return `<div class="offer-prop" style="border-left:5px solid ${color}">${escapeHtml(cell.name)}</div>`;
+            return `<button class="offer-prop-btn" data-cid="${cid}" style="border-left:5px solid ${color}" title="Посмотреть карту">${escapeHtml(cell.name)}</button>`;
         }).join("");
     };
 
@@ -1054,9 +1169,24 @@ function renderIncomingOffer(card, offer, _myPlayer) {
         </div>
     `;
 
+    card.querySelectorAll(".offer-prop-btn").forEach((btn) => {
+        btn.onclick = () => {
+            const cid = parseInt(btn.dataset.cid, 10);
+            selectedCardId = cid;
+            viewingOffer = false;
+            render();
+        };
+    });
+
     const actions = $("card-actions");
-    actions.appendChild(makeBtn("Принять", () => socket.emit("trade:accept"), "primary"));
-    actions.appendChild(makeBtn("Отклонить", () => socket.emit("trade:decline"), "secondary"));
+    actions.appendChild(makeBtn("Принять", () => {
+        socket.emit("trade:accept");
+        viewingOffer = false;
+    }, "primary"));
+    actions.appendChild(makeBtn("Отклонить", () => {
+        socket.emit("trade:decline");
+        viewingOffer = false;
+    }, "secondary"));
 }
 
 function renderOfferBuilder(card, myPlayer) {
@@ -1238,7 +1368,7 @@ function renderCasinoView(card, myPlayer, isMyTurn) {
         }).join("");
 
     let resultHtml = "";
-    if (game.result) {
+    if (game.result && !casinoAnimState) {
         if (game.result.win) {
             const multiText = game.result.jackpotWin
                 ? "джекпот"
@@ -1329,7 +1459,13 @@ function renderCasinoView(card, myPlayer, isMyTurn) {
         }, "secondary"));
     }
 
-    if (game.phase === "done" && pa && pa.type === "casino-result" && isMyTurn && myPlayer?.id === game.initiatorId) {
+    if (game.phase === "ready-to-spin" && myPlayer?.id === game.initiatorId) {
+        actions.appendChild(makeBtn("🎰 Крутить!", () => {
+            socket.emit("casino:spin");
+        }, "primary"));
+    }
+
+    if (game.phase === "done" && !casinoAnimState && pa && pa.type === "casino-result" && isMyTurn && myPlayer?.id === game.initiatorId) {
         actions.appendChild(makeBtn("Продолжить", () => {
             socket.emit("casino:continue");
         }, "primary"));
@@ -1401,6 +1537,7 @@ class DebugTool {
     give(player, type, data) { this._emit("playerGive", { target: player, type, data }); }
     take(player, type, data) { this._emit("playerTake", { target: player, type, data }); }
     turn(player) { this._emit("playerTurn", { target: player }); }
+    kick(player) { this._emit("playerKick", { target: player }); }
 
     setJackpot(amount) { this._emit("setJackpot", { amount }); }
 
@@ -1437,6 +1574,7 @@ player — имя игрока (строка) или id (число)
   d.take(player, "balance", amt)      — снять с игрока деньги
   d.take(player, "property", cardId)  — забрать у игрока карту (в банк)
   d.turn(player)             — передать ход игроку
+  d.kick(player)             — выкинуть игрока (помечает "вышел")
 
 Общее:
   d.setJackpot(amt)          — изменить джекпот казино

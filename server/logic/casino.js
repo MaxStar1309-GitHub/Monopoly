@@ -39,7 +39,9 @@ function accept(game, player, data) {
     game.logMsg(`🎰 {p:${player.id}} зашёл в казино, ставка $${bet}. ${suffix}`);
     game.pendingAction = { type: "casino-betting" };
 
-    if (others.length === 0) roll(game);
+    if (others.length === 0) {
+        game.casinoGame.phase = "ready-to-spin";
+    }
     return { events: [] };
 }
 
@@ -71,7 +73,9 @@ function join(game, player, bet) {
     game.casinoGame.waitingFor = game.casinoGame.waitingFor.filter((id) => id !== player.id);
     game.logMsg(`🎰 {p:${player.id}} присоединился к казино, ставка $${bet}.`);
 
-    if (game.casinoGame.waitingFor.length === 0) roll(game);
+    if (game.casinoGame.waitingFor.length === 0) {
+        game.casinoGame.phase = "ready-to-spin";
+    }
     return { events: [] };
 }
 
@@ -86,7 +90,20 @@ function skip(game, player) {
     game.casinoGame.waitingFor = game.casinoGame.waitingFor.filter((id) => id !== player.id);
     game.logMsg(`{p:${player.id}} отказался играть в казино.`);
 
-    if (game.casinoGame.waitingFor.length === 0) roll(game);
+    if (game.casinoGame.waitingFor.length === 0) {
+        game.casinoGame.phase = "ready-to-spin";
+    }
+    return { events: [] };
+}
+
+function spin(game, player) {
+    if (!game.casinoGame || game.casinoGame.phase !== "ready-to-spin") {
+        return { error: "Сейчас нельзя крутить." };
+    }
+    if (player.id !== game.casinoGame.initiatorId) {
+        return { error: "Крутить может только инициатор." };
+    }
+    roll(game);
     return { events: [] };
 }
 
@@ -187,4 +204,4 @@ function cont(game, player) {
     return { events: [] };
 }
 
-module.exports = { accept, decline, join, skip, continue: cont };
+module.exports = { accept, decline, join, skip, spin, continue: cont };
