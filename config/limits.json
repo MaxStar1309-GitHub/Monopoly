@@ -3,5 +3,6 @@
     "hurryLapCooldown": 2,
     "lobbyCodeLength": 5,
     "lobbyMinPlayers": 2,
-    "lobbyMaxPlayers": 6
+    "lobbyMaxPlayers": 6,
+    "auctionMinRaise": 10
 }

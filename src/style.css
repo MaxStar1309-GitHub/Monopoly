@@ -445,3 +445,178 @@ button h4 {
     25% { transform: translateX(-5px); }
     75% { transform: translateX(5px); }
 }
+
+/* Меню кнопок */
+#menu-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin: 28px 0 8px;
+}
+
+.menu-btn {
+    width: 100%;
+    height: 58px;
+    padding: 0 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.menu-btn h3 {
+    color: #0a0604;
+    font-family: 'Cinzel', serif;
+    font-weight: 900;
+    letter-spacing: 2.5px;
+    text-transform: uppercase;
+    font-size: 0.95rem;
+    line-height: 1;
+    margin: 0;
+}
+
+.secondary-btn {
+    background: rgba(0, 0, 0, 0.4) !important;
+    color: #c9b378 !important;
+    border: 1px solid rgba(212, 175, 55, 0.3) !important;
+    box-shadow: none !important;
+    width: 100%;
+    margin-top: 10px;
+    height: 42px;
+    padding: 0 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.secondary-btn h4 {
+    color: #c9b378 !important;
+    letter-spacing: 1.5px;
+    margin: 0;
+    font-size: 0.82rem;
+    line-height: 1;
+}
+
+.secondary-btn:hover {
+    background: rgba(0, 0, 0, 0.5) !important;
+    transform: none !important;
+    border-color: rgba(212, 175, 55, 0.5) !important;
+}
+
+/* new_game form */
+.settings-heading {
+    text-align: center;
+    color: #d4af37;
+    font-family: 'Cinzel', serif;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    font-size: 0.85rem;
+    margin-top: 24px;
+    margin-bottom: 12px;
+    border-top: 1px dashed rgba(212, 175, 55, 0.25);
+    padding-top: 16px;
+}
+
+.mode-options, .modifier-options {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.mode-card, .mod-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 14px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(212, 175, 55, 0.2);
+    border-radius: 2px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.mode-card:has(input:checked), .mod-card:has(input:checked) {
+    border-color: #d4af37;
+    background: linear-gradient(180deg, rgba(212, 175, 55, 0.08), rgba(0, 0, 0, 0.3));
+    box-shadow: 0 0 10px rgba(212, 175, 55, 0.1);
+}
+
+.mode-card input[type="radio"], .mod-card input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: #d4af37;
+    margin-top: 3px;
+    flex-shrink: 0;
+}
+
+.mode-card-body, .mod-card-body {
+    flex: 1;
+}
+
+.mode-name, .mod-name {
+    font-family: 'Cinzel', serif;
+    color: #d4af37;
+    font-weight: 700;
+    font-size: 1rem;
+    letter-spacing: 1.5px;
+}
+
+.mode-desc, .mod-desc {
+    color: #c9b378;
+    font-size: 0.8rem;
+    margin-top: 3px;
+    font-family: 'Playfair Display', serif;
+    font-style: italic;
+}
+
+.big-create-btn {
+    width: 100%;
+    height: 58px;
+    margin-top: 22px;
+    padding: 0 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.big-create-btn h3 {
+    color: #0a0604;
+    font-family: 'Cinzel', serif;
+    font-weight: 900;
+    letter-spacing: 2.5px;
+    text-transform: uppercase;
+    font-size: 0.95rem;
+    line-height: 1;
+    margin: 0;
+}
+
+/* Lobby info */
+#game-settings-info {
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(212, 175, 55, 0.2);
+    border-radius: 2px;
+    padding: 12px 16px;
+    margin: 16px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.game-info-row {
+    display: flex;
+    justify-content: space-between;
+    font-family: 'Playfair Display', serif;
+    font-size: 0.9rem;
+}
+
+.info-label {
+    color: #8c7548;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    font-size: 0.78rem;
+    font-family: 'Cinzel', serif;
+}
+
+.info-value {
+    color: #d4af37;
+    font-weight: 700;
+}

@@ -1,4 +1,5 @@
 const { BOARD } = require("../board-data");
+const auction = require("./auction");
 
 function hasFullGroup(game, player, group) {
     const groupCells = BOARD.filter((c) => c.type === "property" && c.group === group);
@@ -42,9 +43,15 @@ function declineBuy(game, player) {
     if (!game.pendingAction || game.pendingAction.type !== "buy-option") {
         return { error: "Нечего отклонять." };
     }
-    game.logMsg(`{p:${player.id}} отказался покупать.`);
-    game.phase = "action";
-    game.pendingAction = game.doublesCount > 0 ? { type: "roll-again" } : { type: "end-turn-only" };
+    const cardId = game.pendingAction.cardId;
+    if (game.features && game.features.auction === false) {
+        game.logMsg(`{p:${player.id}} отказался покупать {c:${cardId}}.`);
+        game.phase = "action";
+        game.pendingAction = game.doublesCount > 0 ? { type: "roll-again" } : { type: "end-turn-only" };
+        return { events: [] };
+    }
+    game.logMsg(`{p:${player.id}} отказался покупать. Начинается аукцион.`);
+    auction.start(game, cardId);
     return { events: [] };
 }
 
@@ -81,8 +88,18 @@ function buyHouse(game, player, cardId) {
         return { error: "Строй равномерно. Достройй на других улицах группы сначала." };
     }
 
+    const onThisCell = player.position === cardId;
+    const hasToken = (player.buildAnywhereTokens || 0) > 0;
+    if (!onThisCell && !hasToken) {
+        return { error: "🏗 Строить можно только на клетке, где ты стоишь." };
+    }
+
     player.balance -= cell.housePrice;
     own.houses++;
+    if (!onThisCell && hasToken) {
+        player.buildAnywhereTokens--;
+        game.logMsg(`🏗 {p:${player.id}} использовал карту постройки. Осталось: ${player.buildAnywhereTokens}.`);
+    }
     game.stats[player.id].spent += cell.housePrice;
     game.logMsg(`{p:${player.id}} построил дом на {c:${cardId}}. Домов: ${own.houses}.`);
     return { events: [] };
@@ -124,9 +141,18 @@ function buyHotel(game, player, cardId) {
         return { error: "На других улицах группы должно быть по 4 дома или отель." };
     }
 
+    const onThisCell = player.position === cardId;
+    const hasToken = (player.buildAnywhereTokens || 0) > 0;
+    if (!onThisCell && !hasToken) {
+        return { error: "🏗 Строить можно только на клетке, где ты стоишь." };
+    }
+
     player.balance -= cell.housePrice;
     own.houses = 0;
     own.hotel = true;
+    if (!onThisCell && hasToken) {
+        player.buildAnywhereTokens--;
+    }
     game.stats[player.id].spent += cell.housePrice;
     game.logMsg(`{p:${player.id}} построил отель на {c:${cardId}}.`);
     return { events: [] };

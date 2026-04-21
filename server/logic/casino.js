@@ -1,7 +1,9 @@
 const CFG = require("../config");
 
 const SYMBOLS = CFG.casino.symbols;
+const EXTRA_SYMBOLS = CFG.casino.gamblerExtraSymbols || [];
 const MIN_BET = CFG.casino.minBet;
+const MAX_BET = CFG.casino.maxBet || 500;
 const TRIPLE = CFG.casino.tripleMultipliers;
 const PAIR = CFG.casino.pairMultipliers;
 const JACKPOT_SYMBOL = CFG.casino.jackpotPairSymbol;
@@ -14,6 +16,7 @@ function accept(game, player, data) {
     const bet = parseInt(data?.bet, 10);
     const solo = !!data?.solo;
     if (isNaN(bet) || bet < MIN_BET) return { error: `Минимальная ставка $${MIN_BET}.` };
+    if (bet > MAX_BET) return { error: `Максимальная ставка $${MAX_BET}.` };
     if (player.balance < bet) return { error: "Недостаточно денег." };
 
     player.balance -= bet;
@@ -65,6 +68,7 @@ function join(game, player, bet) {
     const minBet = game.casinoGame.minBet;
     bet = parseInt(bet, 10);
     if (isNaN(bet) || bet < minBet) return { error: `Минимальная ставка $${minBet}.` };
+    if (bet > MAX_BET) return { error: `Максимальная ставка $${MAX_BET}.` };
     if (player.balance < bet) return { error: "Недостаточно денег." };
 
     player.balance -= bet;
@@ -108,9 +112,12 @@ function spin(game, player) {
 }
 
 function roll(game) {
-    const pick = () => SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)];
+    const gambler = (game.modifiers || []).includes("gambler");
+    const activeSymbols = gambler ? [...SYMBOLS, ...EXTRA_SYMBOLS] : SYMBOLS;
+    const pick = () => activeSymbols[Math.floor(Math.random() * activeSymbols.length)];
     const slots = [pick(), pick(), pick()];
     game.casinoGame.slots = slots;
+    const winMult = gambler ? 1.5 : 1.0;
 
     const totalBet = Object.values(game.casinoGame.bets).reduce((a, b) => a + b, 0);
     const winnerIds = Object.keys(game.casinoGame.bets).map(Number);
@@ -151,7 +158,7 @@ function roll(game) {
             ? Math.floor((avgBet - game.jackpot) * JACKPOT_BONUS_MULT)
             : 0;
         const totalBonus = bonusPerPlayer * n;
-        const prize = totalBet + game.jackpot + totalBonus;
+        const prize = Math.floor((totalBet + game.jackpot + totalBonus) * winMult);
         const perWinner = Math.floor(prize / n);
         for (const pid of winnerIds) {
             const p = game.players.find((pp) => pp.id === pid);
@@ -166,7 +173,7 @@ function roll(game) {
         const bonusMsg = bonusPerPlayer > 0 ? ` (+$${bonusPerPlayer} бонус за превышение)` : "";
         game.logMsg(`🎰 ${slots.join(" ")} — 💎💎 ДЖЕКПОТ! каждому по $${perWinner}${bonusMsg}.`);
     } else if (multiplier > 0) {
-        const prize = Math.floor(totalBet * multiplier);
+        const prize = Math.floor(totalBet * multiplier * winMult);
         const perWinner = Math.floor(prize / winnerIds.length);
         for (const pid of winnerIds) {
             const p = game.players.find((pp) => pp.id === pid);

@@ -387,6 +387,7 @@ function renderPlayerList(myPlayer) {
 
         const jailBadge = p.inJail && !p.bankrupt && !p.left ? ' <span class="player-tag tag-jail">в тюрьме</span>' : "";
         const goojfBadge = (p.freeJailCards || 0) > 0 ? ` <span class="player-tag tag-key" title="Карт освобождения из тюрьмы">🔑${p.freeJailCards}</span>` : "";
+        const buildBadge = (p.buildAnywhereTokens || 0) > 0 ? ` <span class="player-tag tag-build" title="Разрешений на постройку">🏗${p.buildAnywhereTokens}</span>` : "";
 
         const isMuted = myPlayer && (myPlayer.mutedIds || []).includes(p.id);
 
@@ -403,7 +404,7 @@ function renderPlayerList(myPlayer) {
 
         div.innerHTML = `
             <div class="player-main">
-                <h3>${meBadge}${swatch}<span class="player-name-text">${escapeHtml(p.name)}</span>${statusTag}${jailBadge}${goojfBadge}</h3>
+                <h3>${meBadge}${swatch}<span class="player-name-text">${escapeHtml(p.name)}</span>${statusTag}${jailBadge}${goojfBadge}${buildBadge}</h3>
                 <div class="player-row-balance">$${p.balance}</div>
             </div>
             ${controlsHtml}
@@ -495,6 +496,13 @@ function formatLogEntry(raw) {
 
 function computeBottomNotif(myPlayer, isMyTurn) {
     if (!myPlayer) return null;
+    const pa = state.pendingAction;
+
+    if (isMyTurn && pa && (pa.type === "pay-rent" || pa.type === "pay-tax")
+        && myPlayer.balance < pa.amount && myPlayer.properties.length > 0) {
+        return "💼 У ВАС ЕСТЬ ИМУЩЕСТВО";
+    }
+
     if (recentGiftNotif && (performance.now() - recentGiftNotif.at) < 4000) {
         return `🎁 ${recentGiftNotif.fromName}: +$${recentGiftNotif.amount}`;
     }
@@ -503,7 +511,12 @@ function computeBottomNotif(myPlayer, isMyTurn) {
         const sender = state.players.find((p) => p.id === offer.fromId);
         return `💌 Предложение от ${sender ? sender.name : "?"}`;
     }
-    const pa = state.pendingAction;
+    if (state.auction
+        && state.auction.participantIds.includes(myPlayer.id)
+        && !state.auction.passedIds.includes(myPlayer.id)) {
+        const cell = state.board[state.auction.cardId];
+        return `🔨 Аукцион: ${cell.name}`;
+    }
     if (isMyTurn && pa && ["buy-option", "pay-rent", "pay-tax", "card-draw", "casino-offer"].includes(pa.type)) {
         return "⚠ Ожидается действие";
     }
@@ -521,6 +534,12 @@ function updateAttentionCell(myPlayer, isMyTurn) {
         } else if (pa.type === "pay-tax" || pa.type === "card-draw" || pa.type === "casino-offer") {
             pendingCellId = myPlayer.position;
         }
+    }
+
+    if (pendingCellId === null && state.auction
+        && state.auction.participantIds.includes(myPlayer.id)
+        && !state.auction.passedIds.includes(myPlayer.id)) {
+        pendingCellId = state.auction.cardId;
     }
 
     if (pendingCellId === null && state.casinoGame
@@ -616,6 +635,13 @@ function renderCardDisplay(myPlayer, isMyTurn) {
 
     if (state.casinoGame) {
         renderCasinoView(card, myPlayer, isMyTurn);
+        return;
+    }
+
+    // Аукцион — виден по умолчанию, но клик на карту/игрока переключает
+    if (state.auction && selectedCardId === null && selectedPlayerId === null
+        && offerBuilderTargetId === null && !viewingOffer) {
+        renderAuctionView(card, myPlayer);
         return;
     }
 
@@ -722,14 +748,18 @@ function renderCellView(card, cardId, myPlayer, isMyTurn) {
         const text = isMatching ? state.lastDrawnCard.text : "Вытяните карту, попав на эту клетку.";
         rentHtml = `<div class="card-drawn-text ${isMatching ? 'active' : ''}">${escapeHtml(text)}</div>`;
     } else if (cell.type === "casino") {
-        rentHtml = `
-            <div class="card-drawn-text">
-                🎰 Казино слот-машина. Сделай ставку и крути барабан из 3 слотов.
-                Символы: 💎 алмаз, 👑 корона, ⭐ звезда, 🍒 вишня.
-                Можно играть одному или позвать остальных.
-                Не совпало — ставка уходит в джекпот. При 💎💎 джекпот твой + бонус, если ставка его превысила.
-            </div>
-        `;
+        if (state.features && state.features.casino === false) {
+            rentHtml = `<div class="card-drawn-text">🚫 В этой игре казино отключено.</div>`;
+        } else {
+            rentHtml = `
+                <div class="card-drawn-text">
+                    🎰 Казино слот-машина. Сделай ставку и крути барабан из 3 слотов.
+                    Символы: 💎 алмаз, 👑 корона, ⭐ звезда, 🍒 вишня.
+                    Можно играть одному или позвать остальных.
+                    Не совпало — ставка уходит в джекпот. При 💎💎 джекпот твой + бонус, если ставка его превысила.
+                </div>
+            `;
+        }
     } else if (cell.type === "corner") {
         if (cell.action === "go") {
             rentHtml = `
@@ -836,6 +866,16 @@ function renderCellView(card, cardId, myPlayer, isMyTurn) {
             actions.appendChild(makeBtn(`Заплатить аренду $${pa.amount}`, () => socket.emit("game:accept-pay"), "secondary"));
             return;
         }
+    }
+
+    if (state.auction && myPlayer
+        && state.auction.participantIds.includes(myPlayer.id)
+        && !state.auction.passedIds.includes(myPlayer.id)) {
+        actions.appendChild(makeBtn("← К аукциону", () => {
+            selectedCardId = null;
+            selectedPlayerId = null;
+            render();
+        }, "primary"));
     }
 
     if (own && own.ownerId === myPlayer?.id && cell.type === "property") {
@@ -964,6 +1004,13 @@ function renderPlayerView(card, playerId, myPlayer) {
         `;
     }
 
+    const amInAuction = state.auction && myPlayer
+        && state.auction.participantIds.includes(myPlayer.id)
+        && !state.auction.passedIds.includes(myPlayer.id);
+    const auctionReturnHtml = amInAuction
+        ? `<button id="player-view-return-auction" class="card-action-btn primary" style="width:100%;margin-top:10px">← К аукциону</button>`
+        : "";
+
     card.innerHTML = `
         <div class="card-header player-view-header" style="background:${player.color}">
             <div class="card-type-label">Игрок${isMe ? " (ты)" : ""}</div>
@@ -976,6 +1023,7 @@ function renderPlayerView(card, playerId, myPlayer) {
             ${propsHtml}
             ${offerBtnHtml}
             ${tradeHtml}
+            ${auctionReturnHtml}
             <button id="player-view-close" class="secondary" style="margin-top:15px;width:100%">Закрыть</button>
         </div>
     `;
@@ -993,6 +1041,15 @@ function renderPlayerView(card, playerId, myPlayer) {
         selectedPlayerId = null;
         render();
     };
+
+    const auctionReturnBtn = $("player-view-return-auction");
+    if (auctionReturnBtn) {
+        auctionReturnBtn.onclick = () => {
+            selectedPlayerId = null;
+            selectedCardId = null;
+            render();
+        };
+    }
 
     const viewOfferBtn = $("btn-view-offer");
     if (viewOfferBtn) {
@@ -1277,6 +1334,81 @@ function renderOfferBuilder(card, myPlayer) {
     }, "secondary"));
 }
 
+function renderAuctionView(card, myPlayer) {
+    const a = state.auction;
+    const cell = state.board[a.cardId];
+    const groupColor = cell.group ? state.groupColors[cell.group] : "#888";
+
+    const currentBidderPlayer = a.currentBidderId !== null
+        ? state.players.find((p) => p.id === a.currentBidderId) : null;
+
+    const bidLines = (a.participantIds || []).map((pid) => {
+        const p = state.players.find((pp) => pp.id === pid);
+        if (!p) return "";
+        const isCurrent = pid === a.currentBidderId;
+        const passed = a.passedIds.includes(pid);
+        let status;
+        if (passed) status = "пас";
+        else if (isCurrent) status = `$${a.currentBid} ведёт`;
+        else status = "ждёт";
+        return `
+            <div class="auction-player-line ${passed ? 'passed' : ''} ${isCurrent ? 'leading' : ''}">
+                <span class="color-swatch" style="background:${p.color};width:14px;height:14px"></span>
+                <span class="bet-name">${escapeHtml(p.name)}</span>
+                <span class="bet-amount">${status}</span>
+            </div>
+        `;
+    }).join("");
+
+    const amIActive = myPlayer
+        && a.participantIds.includes(myPlayer.id)
+        && !a.passedIds.includes(myPlayer.id);
+    const minBid = a.currentBid === 0 ? a.startPrice : a.currentBid + a.minRaise;
+
+    const myRow = amIActive ? `
+        <div class="casino-bet-row">
+            <label>Ставка (мин $${minBid}):</label>
+            <input type="number" id="auction-bid-input" min="${minBid}" value="${minBid}" step="${a.minRaise}">
+        </div>
+    ` : "";
+
+    card.innerHTML = `
+        <div class="card-header" style="background:${groupColor}">
+            <div class="card-type-label">🔨 Аукцион</div>
+            <h1>${escapeHtml(cell.name)}</h1>
+        </div>
+        <div class="card-body">
+            <div class="card-price">Стартовая цена: <b>$${a.startPrice}</b></div>
+            <div class="casino-stats">
+                <div class="casino-stat jackpot">
+                    <div class="stat-label">Текущая ставка</div>
+                    <div class="stat-value">${a.currentBid > 0 ? `$${a.currentBid}` : "—"}</div>
+                </div>
+                <div class="casino-stat pool">
+                    <div class="stat-label">Шаг</div>
+                    <div class="stat-value">$${a.minRaise}</div>
+                </div>
+            </div>
+            ${currentBidderPlayer ? `<div class="card-owner-line">Лидер: <span style="color:${currentBidderPlayer.color}">${escapeHtml(currentBidderPlayer.name)}</span></div>` : ""}
+            <h3 class="player-view-section-title">Участники</h3>
+            <div class="casino-bets">${bidLines}</div>
+            ${myRow}
+            <div id="card-actions"></div>
+        </div>
+    `;
+
+    const actions = $("card-actions");
+    if (amIActive) {
+        actions.appendChild(makeBtn(`Ставить`, () => {
+            const amount = parseInt($("auction-bid-input").value, 10);
+            socket.emit("auction:bid", { amount });
+        }, "primary"));
+        actions.appendChild(makeBtn("Пас", () => {
+            socket.emit("auction:pass");
+        }, "secondary"));
+    }
+}
+
 function renderCasinoOffer(card, _myPlayer, minBet) {
     card.innerHTML = `
         <div class="card-header casino-header">
@@ -1293,8 +1425,8 @@ function renderCasinoOffer(card, _myPlayer, minBet) {
                 Проигрыш → джекпот. 💎💎 — забираешь джекпот + бонус.
             </div>
             <div class="casino-bet-row">
-                <label>Ставка:</label>
-                <input type="number" id="casino-bet-input" min="${minBet}" value="${minBet}" step="10">
+                <label>Ставка ($${minBet} – $${state.casinoMaxBet || 500}):</label>
+                <input type="number" id="casino-bet-input" min="${minBet}" max="${state.casinoMaxBet || 500}" value="${minBet}" step="10">
             </div>
             <div class="casino-mode-row">
                 <label class="mode-option">
@@ -1391,10 +1523,11 @@ function renderCasinoView(card, myPlayer, isMyTurn) {
     }
 
     const amIWaiting = myPlayer && game.phase === "betting" && game.waitingFor.includes(myPlayer.id);
+    const maxBet = state.casinoMaxBet || 500;
     const myBetRow = amIWaiting ? `
         <div class="casino-bet-row">
-            <label>Ставка (мин $${game.minBet}):</label>
-            <input type="number" id="casino-bet-input" min="${game.minBet}" value="${game.minBet}" step="10">
+            <label>Ставка ($${game.minBet} – $${maxBet}):</label>
+            <input type="number" id="casino-bet-input" min="${game.minBet}" max="${maxBet}" value="${game.minBet}" step="10">
         </div>
     ` : "";
 

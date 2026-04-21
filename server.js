@@ -123,6 +123,14 @@ io.on("connection", (socket) => {
         lobbyManager.handleGameAction(socket, "casinoSpin");
     });
 
+    socket.on("auction:bid", (data) => {
+        lobbyManager.handleGameAction(socket, "auctionBid", data);
+    });
+
+    socket.on("auction:pass", () => {
+        lobbyManager.handleGameAction(socket, "auctionPass");
+    });
+
     socket.on("casino:continue", () => {
         lobbyManager.handleGameAction(socket, "casinoContinue");
     });

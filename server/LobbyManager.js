@@ -17,7 +17,7 @@ class LobbyManager {
         this.socketToLobby = new Map();
     }
 
-    createLobby(socket, { maxPlayers, playerName, playerColor }) {
+    createLobby(socket, { maxPlayers, playerName, playerColor, mode, modifiers, features }) {
         const max = parseInt(maxPlayers, 10);
         const MIN = CFG.limits.lobbyMinPlayers;
         const MAX = CFG.limits.lobbyMaxPlayers;
@@ -30,6 +30,15 @@ class LobbyManager {
             return;
         }
 
+        const validMode = CFG.modes[mode] ? mode : "classic";
+        const validModifiers = Array.isArray(modifiers)
+            ? modifiers.filter((m) => ["magnate", "chances", "gambler"].includes(m))
+            : [];
+        const validFeatures = {
+            casino: features?.casino !== false,
+            auction: features?.auction !== false,
+        };
+
         let lobbyId;
         do {
             lobbyId = generateLobbyId();
@@ -39,6 +48,9 @@ class LobbyManager {
             id: lobbyId,
             hostSocketId: socket.id,
             maxPlayers: max,
+            mode: validMode,
+            modifiers: validModifiers,
+            features: validFeatures,
             players: [{
                 socketId: socket.id,
                 name: playerName.trim(),
@@ -135,6 +147,9 @@ class LobbyManager {
             lobbyId,
             maxPlayers: lobby.maxPlayers,
             hostSocketId: lobby.hostSocketId,
+            mode: lobby.mode || "classic",
+            modifiers: lobby.modifiers || [],
+            features: lobby.features || { casino: true, auction: true },
             players: lobby.players.map((p) => ({
                 socketId: p.socketId,
                 name: p.name,
@@ -162,7 +177,11 @@ class LobbyManager {
         }
 
         lobby.state = "playing";
-        lobby.game = new GameState(lobby.players);
+        lobby.game = new GameState(lobby.players, {
+            mode: lobby.mode || "classic",
+            modifiers: lobby.modifiers || [],
+            features: lobby.features || { casino: true, auction: true },
+        });
 
         this.io.to(lobbyId).emit("game:start", { lobbyId });
 

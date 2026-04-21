@@ -8,7 +8,7 @@
     <script src="/socket.io/socket.io.js"></script>
 </head>
 <body>
-    <div id="main">
+    <div id="main" style="max-width: 640px">
         <div id="greeting">
             <h1>Комната ожидания</h1>
         </div>
@@ -18,8 +18,15 @@
             <h4 id="copy-hint">Поделись этим кодом с другими игроками</h4>
         </div>
 
+        <div id="game-settings-info">
+            <div class="game-info-row"><span class="info-label">Режим:</span> <span id="info-mode" class="info-value">—</span></div>
+            <div class="game-info-row"><span class="info-label">Игроков:</span> <span id="info-count" class="info-value">0/0</span></div>
+            <div class="game-info-row"><span class="info-label">Правила:</span> <span id="info-features" class="info-value">—</span></div>
+            <div class="game-info-row"><span class="info-label">Модификаторы:</span> <span id="info-mods" class="info-value">—</span></div>
+        </div>
+
         <div id="players-section">
-            <h3>Игроки (<span id="player-count">0</span>/<span id="player-max">0</span>):</h3>
+            <h3>Игроки:</h3>
             <ul id="player-list"></ul>
         </div>
 
@@ -27,11 +34,20 @@
             <button id="btn-start"><h4>Начать игру</h4></button>
         </div>
 
+        <button id="btn-leave" class="secondary-btn" style="margin-top:10px"><h4>← Выйти из лобби</h4></button>
+
         <div id="error-message"></div>
     </div>
 
     <script>
         const socket = io();
+
+        const MODE_NAMES = { classic: "Классика", blitz: "Блиц" };
+        const MOD_NAMES = {
+            magnate: "🏛️ Магнат",
+            chances: "🃏 Шансы",
+            gambler: "🎰 Азартный",
+        };
 
         const lobbyId = sessionStorage.getItem("lobbyId");
         const me = JSON.parse(sessionStorage.getItem("me") || "null");
@@ -44,15 +60,12 @@
         const lobbyCodeEl = document.getElementById("lobby-code");
         const copyHintEl = document.getElementById("copy-hint");
         lobbyCodeEl.innerText = lobbyId;
-        if (isHost) {
-            document.getElementById("host-controls").style.display = "";
-        }
+        if (isHost) document.getElementById("host-controls").style.display = "";
 
         lobbyCodeEl.style.cursor = "pointer";
         lobbyCodeEl.addEventListener("click", async () => {
-            try {
-                await navigator.clipboard.writeText(lobbyId);
-            } catch (e) {
+            try { await navigator.clipboard.writeText(lobbyId); }
+            catch (e) {
                 const r = document.createRange();
                 r.selectNodeContents(lobbyCodeEl);
                 const s = window.getSelection();
@@ -70,9 +83,7 @@
             }, 1500);
         });
 
-        if (isHost) {
-            navigator.clipboard.writeText(lobbyId).catch(() => {});
-        }
+        if (isHost) navigator.clipboard.writeText(lobbyId).catch(() => {});
 
         const errorMsg = document.getElementById("error-message");
         function showError(msg) {
@@ -84,9 +95,16 @@
             socket.emit("lobby:rejoin", { lobbyId, playerName: me.name });
         });
 
-        socket.on("lobby:updated", ({ players, maxPlayers, hostSocketId }) => {
-            document.getElementById("player-count").innerText = players.length;
-            document.getElementById("player-max").innerText = maxPlayers;
+        socket.on("lobby:updated", ({ players, maxPlayers, hostSocketId, mode, modifiers, features }) => {
+            document.getElementById("info-count").innerText = `${players.length}/${maxPlayers}`;
+            document.getElementById("info-mode").innerText = MODE_NAMES[mode] || mode || "Классика";
+            const modNames = (modifiers || []).map((m) => MOD_NAMES[m] || m);
+            document.getElementById("info-mods").innerText = modNames.length ? modNames.join(", ") : "нет";
+            const f = features || { casino: true, auction: true };
+            const feats = [];
+            feats.push(f.casino ? "🎰 Казино" : "🎰 нет");
+            feats.push(f.auction ? "🔨 Аукцион" : "🔨 нет");
+            document.getElementById("info-features").innerText = feats.join(", ");
 
             const list = document.getElementById("player-list");
             list.innerHTML = "";
@@ -103,14 +121,10 @@
             }
 
             const meRef = players.find((p) => p.name === me.name);
-            if (meRef) {
-                sessionStorage.setItem("me", JSON.stringify(meRef));
-            }
+            if (meRef) sessionStorage.setItem("me", JSON.stringify(meRef));
         });
 
-        socket.on("lobby:error", ({ message }) => {
-            showError(message);
-        });
+        socket.on("lobby:error", ({ message }) => showError(message));
 
         socket.on("game:start", () => {
             window.location.href = "game.html";
@@ -118,6 +132,12 @@
 
         document.getElementById("btn-start").onclick = () => {
             socket.emit("lobby:start", { lobbyId });
+        };
+
+        document.getElementById("btn-leave").onclick = () => {
+            if (!confirm("Выйти из лобби?")) return;
+            sessionStorage.clear();
+            window.location.href = "index.html";
         };
     </script>
 </body>

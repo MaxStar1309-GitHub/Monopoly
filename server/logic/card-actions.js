@@ -4,6 +4,9 @@ const CFG = require("../config");
 const BOARD_SIZE = CFG.game.boardSize;
 
 function apply(game, player, action) {
+    const chanceMult = (game.modifiers || []).includes("chances") ? 1.25 : 1.0;
+    const adj = (amount) => Math.floor(amount * chanceMult);
+
     const postSettle = () => {
         game.phase = "action";
         game.pendingAction = game.doublesCount > 0 && !player.inJail && !player.bankrupt
@@ -12,24 +15,44 @@ function apply(game, player, action) {
     };
 
     if (action.type === "collect") {
-        player.balance += action.amount;
-        game.logMsg(`{p:${player.id}} получил $${action.amount}.`);
+        const a = adj(action.amount);
+        player.balance += a;
+        game.logMsg(`{p:${player.id}} получил $${a}.`);
         postSettle();
         return;
     }
     if (action.type === "pay") {
-        player.balance -= action.amount;
-        game.logMsg(`{p:${player.id}} заплатил $${action.amount} в банк.`);
-        if (player.balance <= 0) game.bankruptPlayer(player, null);
+        const a = adj(action.amount);
+        if (player.balance < a && player.properties.length > 0) {
+            const paid = Math.max(0, player.balance);
+            player.balance -= paid;
+            game.logMsg(`{p:${player.id}} частично заплатил $${paid} (требовалось $${a}). Баланс ${player.balance}.`);
+        } else {
+            player.balance -= a;
+            game.logMsg(`{p:${player.id}} заплатил $${a} в банк.`);
+            if (player.balance < 0 && player.properties.length === 0) game.bankruptPlayer(player, null);
+        }
         postSettle();
         return;
     }
     if (action.type === "collect-each") {
+        const perPlayer = adj(action.amount);
+        const skipped = [];
+        let totalReceived = 0;
         for (const other of game.players) {
             if (other.id === player.id || other.bankrupt || other.left) continue;
-            game.payMoney(other, player, action.amount);
+            if (other.balance < perPlayer) {
+                skipped.push(other);
+                continue;
+            }
+            other.balance -= perPlayer;
+            player.balance += perPlayer;
+            totalReceived += perPlayer;
         }
-        game.logMsg(`{p:${player.id}} получил по $${action.amount} от каждого игрока.`);
+        game.logMsg(`{p:${player.id}} получил $${totalReceived} (по $${perPlayer} с игроков).`);
+        for (const s of skipped) {
+            game.logMsg(`{p:${s.id}} не смог заплатить $${perPlayer} (второй шанс).`);
+        }
         postSettle();
         return;
     }
@@ -52,9 +75,15 @@ function apply(game, player, action) {
         }
         const amount = totalHouses * action.perHouse + totalHotels * action.perHotel;
         if (amount > 0) {
-            player.balance -= amount;
-            game.logMsg(`{p:${player.id}} заплатил $${amount} за ремонт (${totalHouses}🏠 + ${totalHotels}🏨).`);
-            if (player.balance <= 0) game.bankruptPlayer(player, null);
+            if (player.balance < amount && player.properties.length > 0) {
+                const paid = Math.max(0, player.balance);
+                player.balance -= paid;
+                game.logMsg(`{p:${player.id}} частично заплатил $${paid} за ремонт (требовалось $${amount}).`);
+            } else {
+                player.balance -= amount;
+                game.logMsg(`{p:${player.id}} заплатил $${amount} за ремонт (${totalHouses}🏠 + ${totalHotels}🏨).`);
+                if (player.balance < 0 && player.properties.length === 0) game.bankruptPlayer(player, null);
+            }
         } else {
             game.logMsg(`У {p:${player.id}} нет построек, ремонт бесплатно.`);
         }
@@ -69,6 +98,12 @@ function apply(game, player, action) {
     if (action.type === "get-out-jail") {
         player.freeJailCards = (player.freeJailCards || 0) + 1;
         game.logMsg(`🔑 {p:${player.id}} получил карту освобождения из тюрьмы (всего: ${player.freeJailCards}).`);
+        postSettle();
+        return;
+    }
+    if (action.type === "build-anywhere") {
+        player.buildAnywhereTokens = (player.buildAnywhereTokens || 0) + 1;
+        game.logMsg(`🏗 {p:${player.id}} получил разрешение на постройку дома.`);
         postSettle();
         return;
     }

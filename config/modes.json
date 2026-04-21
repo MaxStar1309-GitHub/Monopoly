@@ -1,0 +1,14 @@
+{
+    "classic": {
+        "name": "Классика",
+        "startBalance": 1500,
+        "rentMultiplier": 1.0,
+        "description": "Стандартные правила Монополии."
+    },
+    "blitz": {
+        "name": "Блиц",
+        "startBalance": 800,
+        "rentMultiplier": 2.0,
+        "description": "Меньше денег, двойная аренда. Быстрая партия."
+    }
+}

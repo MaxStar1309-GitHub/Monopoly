@@ -12,6 +12,7 @@ const CHANCE_CARDS = [
     { text: "Вас избрали председателем совета. Платите каждому игроку по $50.", action: { type: "pay-each", amount: 50 } },
     { text: "Отправляйтесь в тюрьму. Не проходите Старт.", action: { type: "jail" } },
     { text: "🔑 Карта освобождения из тюрьмы. Сохрани её.", action: { type: "get-out-jail" } },
+    { text: "🏗 Разрешение на постройку: построй дом на любой своей улице.", action: { type: "build-anywhere" } },
 ];
 
 const COMMUNITY_CARDS = [

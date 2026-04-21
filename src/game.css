@@ -443,6 +443,7 @@ h1, h2, h3, h4 {
 .tag-jail { background: rgba(212, 175, 55, 0.15); color: #d4af37; border: 1px solid rgba(212, 175, 55, 0.4); }
 .tag-turn { background: rgba(212, 175, 55, 0.2); color: #d4af37; border: 1px solid #d4af37; }
 .tag-key { background: rgba(139, 0, 0, 0.18); color: #ffbbbb; border: 1px solid #8b0000; }
+.tag-build { background: rgba(88, 180, 88, 0.18); color: #a8e6a8; border: 1px solid #3aa744; }
 
 .balance-delta {
     position: absolute;
@@ -1101,6 +1102,27 @@ h1, h2, h3, h4 {
 
 .casino-bet-line.pending .bet-amount { color: #5c4a28; font-weight: 500; }
 .casino-bet-line.declined .bet-amount { color: #888; }
+
+.auction-player-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 10px;
+    background: rgba(0, 0, 0, 0.04);
+    border-radius: 2px;
+    font-family: 'Playfair Display', serif;
+    font-size: 0.85rem;
+    color: #3a2e1a;
+}
+.auction-player-line.leading {
+    background: linear-gradient(90deg, rgba(212, 175, 55, 0.2), rgba(0, 0, 0, 0.05));
+    border-left: 3px solid #d4af37;
+    font-weight: 700;
+}
+.auction-player-line.passed {
+    opacity: 0.45;
+    text-decoration: line-through;
+}
 
 .casino-bet-row {
     display: flex;

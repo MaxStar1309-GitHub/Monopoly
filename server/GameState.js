@@ -1,5 +1,6 @@
 const { BOARD, GROUP_COLORS } = require("./board-data");
 const { CHANCE_CARDS, COMMUNITY_CARDS, shuffle } = require("./cards");
+const shuffleArr = shuffle;
 const CFG = require("./config");
 
 const casino = require("./logic/casino");
@@ -7,6 +8,7 @@ const trade = require("./logic/trade");
 const debug = require("./logic/debug");
 const property = require("./logic/property");
 const cardActions = require("./logic/card-actions");
+const auction = require("./logic/auction");
 
 const START_BALANCE = CFG.game.startBalance;
 const PASS_GO_BONUS = CFG.game.passGoBonus;
@@ -21,13 +23,24 @@ const CASINO_STARTING_JACKPOT = CFG.casino.startingJackpot;
 const GIFT_MONEY_MAX_PER_RECIPIENT = CFG.limits.giftMaxPerRecipient;
 
 class GameState {
-    constructor(lobbyPlayers) {
-        this.players = lobbyPlayers.map((p, idx) => ({
+    constructor(lobbyPlayers, settings = {}) {
+        this.mode = settings.mode || "classic";
+        this.modifiers = settings.modifiers || [];
+        this.features = {
+            casino: settings.features?.casino !== false,
+            auction: settings.features?.auction !== false,
+        };
+        const modeCfg = CFG.modes[this.mode] || CFG.modes.classic;
+        const effectiveStartBalance = modeCfg.startBalance ?? START_BALANCE;
+        this.rentMultiplier = modeCfg.rentMultiplier || 1.0;
+
+        const shuffled = shuffleArr(lobbyPlayers);
+        this.players = shuffled.map((p, idx) => ({
             id: idx,
             socketId: p.socketId,
             name: p.name,
             color: p.color,
-            balance: START_BALANCE,
+            balance: effectiveStartBalance,
             position: 0,
             properties: [],
             inJail: false,
@@ -39,6 +52,7 @@ class GameState {
             mutedIds: [],
             hurryHistory: {},
             freeJailCards: 0,
+            buildAnywhereTokens: 0,
         }));
 
         this.bankruptcyOrder = [];
@@ -65,6 +79,7 @@ class GameState {
         this.jackpot = CASINO_STARTING_JACKPOT;
         this.casinoGame = null;
         this.pendingOffers = {};
+        this.auction = null;
 
         this.ownership = {};
         for (const cell of BOARD) {
@@ -91,12 +106,16 @@ class GameState {
                 lapCount: p.lapCount,
                 mutedIds: p.mutedIds || [],
                 freeJailCards: p.freeJailCards || 0,
+                buildAnywhereTokens: p.buildAnywhereTokens || 0,
             })),
             bankruptcyOrder: this.bankruptcyOrder || [],
             winnerId: this.winnerId,
             stats: this.stats,
             doublesCount: this.doublesCount,
             roundNumber: this.roundNumber,
+            mode: this.mode,
+            modifiers: this.modifiers,
+            features: this.features,
             currentPlayerIndex: this.currentPlayerIndex,
             currentPlayerId: this.players[this.currentPlayerIndex].id,
             currentPlayerSocketId: this.players[this.currentPlayerIndex].socketId,
@@ -106,8 +125,12 @@ class GameState {
             lastDrawnCard: this.lastDrawnCard,
             jackpot: this.jackpot,
             casinoGame: this.casinoGame,
-            casinoSymbols: CFG.casino.symbols,
+            casinoSymbols: this.modifiers.includes("gambler")
+                ? [...CFG.casino.symbols, ...(CFG.casino.gamblerExtraSymbols || [])]
+                : CFG.casino.symbols,
             casinoMinBet: CASINO_MIN_BET,
+            casinoMaxBet: CFG.casino.maxBet || 500,
+            auction: this.auction,
             pendingOffers: this.pendingOffers,
             giftLimits: { maxPerRecipient: GIFT_MONEY_MAX_PER_RECIPIENT },
             board: BOARD,
@@ -125,6 +148,8 @@ class GameState {
         // Actions allowed from any player (not just current turn)
         if (action === "casinoJoin") return casino.join(this, player, data?.bet);
         if (action === "casinoSkip") return casino.skip(this, player);
+        if (action === "auctionBid") return auction.bid(this, player, data?.amount);
+        if (action === "auctionPass") return auction.pass(this, player);
         if (action === "debug") return debug.run(this, player, data);
         if (action === "giftMoney") return trade.giftMoney(this, player, data);
         if (action === "sendOffer") return trade.sendOffer(this, player, data);
@@ -260,6 +285,12 @@ class GameState {
         }
 
         if (cell.type === "casino") {
+            if (!this.features.casino) {
+                this.logMsg(`{p:${player.id}} в казино (отключено).`);
+                this.phase = "action";
+                this.pendingAction = this.doublesCount > 0 ? { type: "roll-again" } : { type: "end-turn-only" };
+                return;
+            }
             this.logMsg(`{p:${player.id}} зашёл в казино.`);
             this.phase = "action";
             this.pendingAction = { type: "casino-offer", minBet: CASINO_MIN_BET };
@@ -300,23 +331,25 @@ class GameState {
     }
 
     calculateRent(cell, own) {
+        let base = 0;
         if (cell.type === "property") {
-            if (own.hotel) return cell.rent[5];
-            if (own.houses > 0) return cell.rent[own.houses];
-            return cell.rent[0];
-        }
-        if (cell.type === "railroad") {
+            if (own.hotel) base = cell.rent[5];
+            else if (own.houses > 0) base = cell.rent[own.houses];
+            else base = cell.rent[0];
+        } else if (cell.type === "railroad") {
             const ownerId = own.ownerId;
             const count = BOARD.filter((c) =>
                 c.type === "railroad" && this.ownership[c.id].ownerId === ownerId
             ).length;
-            return cell.rent[Math.min(count - 1, 3)] || cell.rent[0];
-        }
-        if (cell.type === "utility") {
+            base = cell.rent[Math.min(count - 1, 3)] || cell.rent[0];
+        } else if (cell.type === "utility") {
             const diceSum = this.lastDice[0] + this.lastDice[1];
-            return diceSum * 4;
+            base = diceSum * 4;
         }
-        return 0;
+
+        let mult = this.rentMultiplier;
+        if (this.modifiers.includes("magnate")) mult *= 1.1;
+        return Math.floor(base * mult);
     }
 
     endTurn(player) {
@@ -359,7 +392,10 @@ class GameState {
         const actual = Math.min(from.balance, amount);
         from.balance -= actual;
         to.balance += actual;
-        if (from.balance <= 0) this.bankruptPlayer(from, to);
+        // Банкрот только если не смог заплатить полностью И нет имущества на продажу
+        if (actual < amount && from.properties.length === 0) {
+            this.bankruptPlayer(from, to);
+        }
     }
 
     bankruptPlayer(player, creditor) {
@@ -375,6 +411,11 @@ class GameState {
             if (creditor) creditor.properties.push(cid);
         }
         player.properties = [];
+
+        if (this.players[this.currentPlayerIndex].id === player.id) {
+            this.forceNextTurn();
+        }
+        this.checkGameOver();
     }
 
     // ============ JAIL ============
@@ -413,27 +454,33 @@ class GameState {
 
         if (this.pendingAction.type === "pay-tax") {
             const amount = this.pendingAction.amount;
+            if (player.balance < amount && player.properties.length > 0) {
+                return { error: "💼 У тебя есть имущество — продай его, чтобы заплатить." };
+            }
             player.balance -= amount;
             this.stats[player.id].paidRentTax += amount;
             this.logMsg(`{p:${player.id}} заплатил налог $${amount}.`);
             if (player.balance <= 0) this.bankruptPlayer(player, null);
+            if (player.bankrupt) return { events: [] };
 
             this.phase = "action";
-            this.pendingAction = this.doublesCount > 0 && !player.bankrupt
-                ? { type: "roll-again" } : { type: "end-turn-only" };
+            this.pendingAction = this.doublesCount > 0 ? { type: "roll-again" } : { type: "end-turn-only" };
             return { events: [] };
         }
 
         if (this.pendingAction.type === "pay-rent") {
             const { amount, ownerId } = this.pendingAction;
+            if (player.balance < amount && player.properties.length > 0) {
+                return { error: "💼 У тебя есть имущество — продай его, чтобы заплатить." };
+            }
             const owner = this.players.find((p) => p.id === ownerId);
             this.payMoney(player, owner, amount);
             this.stats[player.id].paidRentTax += amount;
             this.logMsg(`{p:${player.id}} заплатил аренду $${amount} игроку {p:${owner.id}}.`);
+            if (player.bankrupt) return { events: [] };
 
             this.phase = "action";
-            this.pendingAction = this.doublesCount > 0 && !player.bankrupt
-                ? { type: "roll-again" } : { type: "end-turn-only" };
+            this.pendingAction = this.doublesCount > 0 ? { type: "roll-again" } : { type: "end-turn-only" };
             return { events: [] };
         }
 

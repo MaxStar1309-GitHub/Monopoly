@@ -42,4 +42,9 @@ const limits = load("limits", {
 
 const debug = load("debug", { users: [] });
 
-module.exports = { game, casino, limits, debug };
+const modes = load("modes", {
+    classic: { name: "Классика", startBalance: 1500, rentMultiplier: 1.0 },
+    blitz: { name: "Блиц", startBalance: 800, rentMultiplier: 2.0 },
+});
+
+module.exports = { game, casino, limits, debug, modes };
